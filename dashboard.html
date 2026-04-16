@@ -1044,50 +1044,55 @@ function setRange(days, btn) {
 // 3. FIFO matching of buys→sells per token in SOL
 
 function getTradesPnl(trades) {
-  // Debug: log first 5 sells raw fields
-  const sells = trades.filter(t => t.type === 'SELL').slice(0, 5);
-  console.log('=== RAW SELL FIELDS ===');
-  sells.forEach(t => {
-    console.log(JSON.stringify({
-      token: t.token,
-      time: t.time,
-      amount_sol: t.amount_sol,
-      amount_token: t.amount_token,
-      pnl: t.pnl,
-      cost_usd: t.cost_usd,
-      buy_cost_usd: t.buy_cost_usd,
-      price_usd: t.price_usd,
-    }));
+  // Sort oldest → newest for FIFO
+  const sorted = [...trades].sort((a, b) => new Date(a.time) - new Date(b.time));
+
+  // Per-token buy queue: { solSpent, tokAmount }
+  const buyQueues = {};
+
+  sorted.forEach(t => {
+    const sym    = t.token + '_' + t.token_address; // use address to avoid symbol collisions
+    const solAmt = parseFloat(t.amount_sol)   || 0;
+    const tokAmt = parseFloat(t.amount_token) || 0;
+
+    if (t.type === 'BUY') {
+      if (!buyQueues[sym]) buyQueues[sym] = [];
+      if (tokAmt > 0) buyQueues[sym].push({ sol: solAmt, tok: tokAmt });
+      t.pnl = null;
+
+    } else if (t.type === 'SELL') {
+      const queue = buyQueues[sym];
+
+      // No buy seen in this window → skip, don't compute (avoids phantom losses)
+      if (!queue || queue.length === 0) {
+        t.pnl = null;
+        return;
+      }
+
+      const solReceived = solAmt;
+      let   costBasis   = 0;
+      let   remaining   = tokAmt;
+
+      for (const lot of queue) {
+        if (remaining <= 0) break;
+        const used  = Math.min(lot.tok, remaining);
+        costBasis  += (used / lot.tok) * lot.sol;
+        lot.tok    -= used;
+        remaining  -= used;
+      }
+
+      // Remove depleted lots
+      buyQueues[sym] = queue.filter(l => l.tok > 1e-6);
+
+      t.pnl = String((solReceived - costBasis).toFixed(6));
+    }
   });
-  // Also log first 5 buys
-  const buys = trades.filter(t => t.type === 'BUY').slice(0, 5);
-  console.log('=== RAW BUY FIELDS ===');
-  buys.forEach(t => {
-    console.log(JSON.stringify({
-      token: t.token,
-      time: t.time,
-      amount_sol: t.amount_sol,
-      amount_token: t.amount_token,
-    }));
-  });
-  return trades;
+
+  // Return in original order
+  const txIndex = new Map(sorted.map(t => [t.tx || (t.time + t.token + t.amount_sol), t]));
+  return trades.map(t => txIndex.get(t.tx || (t.time + t.token + t.amount_sol)) || t);
 }
 
-function debugPnl() {
-  const enriched = getTradesPnl(allTrades);
-  const sells = enriched.filter(t => t.type === 'SELL' && t.pnl != null);
-  sells.sort((a,b) => new Date(b.time) - new Date(a.time));
-  console.table(sells.slice(0,20).map(t => ({
-    time: t.time,
-    token: t.token,
-    sol_received: parseFloat(t.amount_sol).toFixed(4),
-    pnl: parseFloat(t.pnl).toFixed(4),
-  })));
-  // Also show raw sample
-  console.log('Raw sample (first 3 trades):');
-  allTrades.slice(0,3).forEach(t => console.log(t));
-}
-window.debugPnl = debugPnl;
 
 function buildDailyPnl(days) {
   const enriched = getTradesPnl(allTrades);
