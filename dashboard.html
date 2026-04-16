@@ -680,9 +680,9 @@
     <div class="daily-row header">
       <div>DATE</div><div class="bar-col"></div>
       <div style="text-align:right;padding-right:16px">PnL (SOL)</div>
-      <div style="text-align:right;padding-right:16px">TRADES</div>
-      <div style="text-align:right;padding-right:16px">VOL</div>
-      <div style="text-align:right">WIN RATE</div>
+      <div style="text-align:right;padding-right:16px">SELLS</div>
+      <div style="text-align:right;padding-right:16px">SOL IN</div>
+      <div style="text-align:right">SOL OUT</div>
     </div>
     <div id="dailyRows"></div>
   </div>
@@ -1044,86 +1044,78 @@ function setRange(days, btn) {
 // 3. FIFO matching of buys→sells per token in SOL
 
 function getTradesPnl(trades) {
-  // Sort oldest → newest for FIFO
+  // Simple: PnL per day = sum(SOL received from sells) - sum(SOL spent on buys)
+  // Group by day, then per day: pnl = sells_sol - buys_sol
+  // Assign pnl to each sell proportionally for the per-row display
+  
   const sorted = [...trades].sort((a, b) => new Date(a.time) - new Date(b.time));
-
-  // Per-token buy queue: { solSpent, tokAmount }
+  
+  // For per-row pnl: simple FIFO match within token+address
+  // buy queue per token: stack of { sol }
   const buyQueues = {};
 
   sorted.forEach(t => {
-    const sym    = t.token + '_' + t.token_address; // use address to avoid symbol collisions
-    const solAmt = parseFloat(t.amount_sol)   || 0;
-    const tokAmt = parseFloat(t.amount_token) || 0;
+    const key    = t.token_address || t.token;
+    const solAmt = parseFloat(t.amount_sol) || 0;
 
     if (t.type === 'BUY') {
-      if (!buyQueues[sym]) buyQueues[sym] = [];
-      if (tokAmt > 0) buyQueues[sym].push({ sol: solAmt, tok: tokAmt });
+      if (!buyQueues[key]) buyQueues[key] = [];
+      buyQueues[key].push(solAmt);
       t.pnl = null;
-
     } else if (t.type === 'SELL') {
-      const queue = buyQueues[sym];
-
-      // No buy seen in this window → skip, don't compute (avoids phantom losses)
+      const queue = buyQueues[key];
       if (!queue || queue.length === 0) {
-        t.pnl = null;
+        t.pnl = null; // no matching buy in window
         return;
       }
-
-      const solReceived = solAmt;
-      let   costBasis   = 0;
-      let   remaining   = tokAmt;
-
-      for (const lot of queue) {
-        if (remaining <= 0) break;
-        const used  = Math.min(lot.tok, remaining);
-        costBasis  += (used / lot.tok) * lot.sol;
-        lot.tok    -= used;
-        remaining  -= used;
-      }
-
-      // Remove depleted lots
-      buyQueues[sym] = queue.filter(l => l.tok > 1e-6);
-
-      t.pnl = String((solReceived - costBasis).toFixed(6));
+      const buySol = queue.shift(); // FIFO: take oldest buy
+      t.pnl = String((solAmt - buySol).toFixed(6));
     }
   });
 
-  // Return in original order
-  const txIndex = new Map(sorted.map(t => [t.tx || (t.time + t.token + t.amount_sol), t]));
-  return trades.map(t => txIndex.get(t.tx || (t.time + t.token + t.amount_sol)) || t);
+  return trades.map(t => sorted.find(s =>
+    s.tx ? s.tx === t.tx : (s.time === t.time && s.token === t.token)
+  ) || t);
 }
 
 
 function buildDailyPnl(days) {
-  const enriched = getTradesPnl(allTrades);
-  const sells  = enriched.filter(t => t.type === 'SELL' && t.time);
   const cutoff = days > 0 ? Date.now() - days * 86400000 : 0;
-
   const map = {};
-  sells.forEach(t => {
+
+  allTrades.forEach(t => {
     const ts = new Date(t.time).getTime();
     if (isNaN(ts) || ts < cutoff) return;
     const day = t.time.slice(0, 10);
-    if (!map[day]) map[day] = { pnl: 0, wins: 0, total: 0, vol: 0 };
-    const v = t.pnl != null ? parseFloat(t.pnl) : 0;
-    map[day].pnl += isNaN(v) ? 0 : v;
-    map[day].total++;
-    map[day].vol += parseFloat(t.amount_sol) || 0;
-    if (!isNaN(v) && v > 0) map[day].wins++;
+    if (!map[day]) map[day] = { solIn: 0, solOut: 0, trades: 0 };
+
+    const sol = parseFloat(t.amount_sol) || 0;
+    if (t.type === 'BUY')  map[day].solIn  += sol;
+    if (t.type === 'SELL') { map[day].solOut += sol; map[day].trades++; }
   });
 
   if (days > 0) {
     for (let i = 0; i < days; i++) {
       const d = new Date(Date.now() - i * 86400000);
       const key = d.toISOString().slice(0, 10);
-      if (!map[key]) map[key] = { pnl: 0, wins: 0, total: 0, vol: 0 };
+      if (!map[key]) map[key] = { solIn: 0, solOut: 0, trades: 0 };
     }
   }
 
   return Object.entries(map)
     .sort(([a], [b]) => a < b ? -1 : 1)
-    .map(([date, d]) => ({ date, ...d, wr: d.total > 0 ? (d.wins / d.total * 100).toFixed(0) : '—' }));
+    .map(([date, d]) => ({
+      date,
+      pnl:    d.solOut - d.solIn,
+      solIn:  d.solIn,
+      solOut: d.solOut,
+      total:  d.trades,
+      vol:    d.solIn + d.solOut,
+      wins:   d.solOut > d.solIn ? 1 : 0,
+      wr:     d.trades > 0 ? (d.solOut > d.solIn ? '100' : '0') : '—',
+    }));
 }
+
 
 function renderPnlChart(days) {
   const data   = buildDailyPnl(days);
@@ -1227,17 +1219,16 @@ function renderPnlChart(days) {
   const sorted    = [...data].reverse(); // newest first
 
   document.getElementById('dailyRows').innerHTML = sorted.map(d => {
-    const pnlCls  = d.pnl >= 0 ? 'pos' : 'neg';
-    const barPct  = (Math.abs(d.pnl) / maxBarPnl * 100).toFixed(1);
-    const barClr  = d.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-    const wrCls   = d.wr !== '—' && parseInt(d.wr) >= 50 ? 'pos' : 'neg';
+    const pnlCls = d.pnl >= 0 ? 'pos' : 'neg';
+    const barPct = (Math.abs(d.pnl) / maxBarPnl * 100).toFixed(1);
+    const barClr = d.pnl >= 0 ? 'var(--green)' : 'var(--red)';
     return `<div class="daily-row">
       <div class="date-col">${d.date}</div>
       <div class="bar-col"><div class="daily-bar-track"><div class="daily-bar-fill" style="width:${barPct}%;background:${barClr}"></div></div></div>
       <div class="pnl-col ${pnlCls}">${d.pnl >= 0 ? '+' : ''}${d.pnl.toFixed(4)}</div>
-      <div class="trades-col">${d.total}</div>
-      <div class="vol-col">${d.vol.toFixed(2)}</div>
-      <div class="wr-col ${d.wr !== '—' ? wrCls : ''}">${d.wr}${d.wr !== '—' ? '%' : ''}</div>
+      <div class="trades-col">${d.total} sells</div>
+      <div class="vol-col" style="color:var(--red);font-size:10px">-${d.solIn.toFixed(3)}</div>
+      <div class="wr-col" style="color:var(--green);font-size:10px">+${d.solOut.toFixed(3)}</div>
     </div>`;
   }).join('');
 }
