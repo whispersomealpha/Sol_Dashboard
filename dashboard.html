@@ -467,6 +467,115 @@
   }
   tbody tr.new-trade { animation: newTrade 3s ease forwards, rowIn 0.3s ease both; }
   .watcher-dot-off { animation: none !important; opacity: 0.3; }
+
+  /* Tabs */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 36px;
+    background: var(--bg);
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text3);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    padding: 12px 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: -1px;
+  }
+  .tab-btn:hover { color: var(--text2); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* PnL Chart panel */
+  .pnl-chart-panel { padding: 28px 36px 36px; display: none; }
+  .pnl-chart-panel.visible { display: block; }
+
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .chart-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .chart-range-group { display: flex; gap: 4px; }
+  .range-btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text3);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+  .range-btn:hover { color: var(--text); border-color: var(--text3); }
+  .range-btn.active { background: rgba(0,212,255,0.08); border-color: var(--accent); color: var(--accent); }
+
+  .chart-canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 300px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+  }
+  canvas#pnlCanvas { width: 100%; height: 100%; display: block; }
+
+  /* Daily breakdown table */
+  .daily-table-wrap { margin-top: 28px; }
+  .daily-table-title {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .daily-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 80px 70px 70px 80px;
+    gap: 0;
+    border-bottom: 1px solid rgba(30,45,61,0.5);
+    padding: 10px 0;
+    align-items: center;
+    transition: background 0.1s;
+  }
+  .daily-row:hover { background: rgba(255,255,255,0.015); }
+  .daily-row.header {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.12em;
+    border-bottom: 1px solid var(--border2);
+    padding-bottom: 8px;
+  }
+  .daily-row .date-col { color: var(--text2); font-size: 11px; }
+  .daily-row .bar-col { padding: 0 12px; }
+  .daily-bar-track { height: 4px; background: var(--bg3); position: relative; border-radius: 0; }
+  .daily-bar-fill { height: 100%; position: absolute; top: 0; left: 0; transition: width 0.4s ease; }
+  .daily-row .pnl-col {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: right;
+    padding-right: 16px;
+  }
+  .daily-row .trades-col { color: var(--text2); font-size: 11px; text-align: right; padding-right: 16px; }
+  .daily-row .vol-col   { color: var(--text2); font-size: 11px; text-align: right; padding-right: 16px; }
+  .daily-row .wr-col    { font-size: 11px; text-align: right; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+
 </style>
 </head>
 <body>
@@ -518,6 +627,14 @@
   </div>
 </div>
 
+<!-- Tab bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-trades" onclick="switchTab('trades')">TRADES</button>
+  <button class="tab-btn"        id="tab-pnl"    onclick="switchTab('pnl')">PnL / DAY</button>
+</div>
+
+<!-- Trades tab controls -->
+<div id="panel-trades">
 <div class="controls">
   <div class="filter-group">
     <button class="filter-btn active-all" onclick="setFilter('ALL', this)">ALL</button>
@@ -543,6 +660,32 @@
     </thead>
     <tbody id="tableBody"></tbody>
   </table>
+</div>
+</div><!-- /panel-trades -->
+
+<!-- PnL per day tab -->
+<div id="panel-pnl" class="pnl-chart-panel">
+  <div class="chart-header">
+    <div class="chart-title">REALIZED PnL PER DAY <span style="color:var(--text3);font-size:10px">(SOL, sells only)</span></div>
+    <div class="chart-range-group">
+      <button class="range-btn active" onclick="setRange(7,this)">7D</button>
+      <button class="range-btn" onclick="setRange(14,this)">14D</button>
+      <button class="range-btn" onclick="setRange(30,this)">30D</button>
+      <button class="range-btn" onclick="setRange(0,this)">ALL</button>
+    </div>
+  </div>
+  <div class="chart-canvas-wrap"><canvas id="pnlCanvas"></canvas></div>
+  <div class="daily-table-wrap">
+    <div class="daily-table-title">Daily Breakdown</div>
+    <div class="daily-row header">
+      <div>DATE</div><div class="bar-col"></div>
+      <div style="text-align:right;padding-right:16px">PnL (SOL)</div>
+      <div style="text-align:right;padding-right:16px">TRADES</div>
+      <div style="text-align:right;padding-right:16px">VOL</div>
+      <div style="text-align:right">WIN RATE</div>
+    </div>
+    <div id="dailyRows"></div>
+  </div>
 </div>
 
 <script>
@@ -870,6 +1013,178 @@ function showScrapeLog(log) {
   if (!noData) return;
   noData.querySelector('.log-output').textContent = log;
   noData.style.display = 'block';
+}
+
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+let activeTab = 'trades';
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('panel-trades').style.display = tab === 'trades' ? '' : 'none';
+  document.getElementById('panel-pnl').style.display    = tab === 'pnl'    ? 'block' : 'none';
+  document.getElementById('tab-trades').classList.toggle('active', tab === 'trades');
+  document.getElementById('tab-pnl').classList.toggle('active',    tab === 'pnl');
+  if (tab === 'pnl') renderPnlChart(currentRange);
+}
+
+// ── PnL per day ───────────────────────────────────────────────────────────────
+let currentRange = 7;
+
+function setRange(days, btn) {
+  currentRange = days;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderPnlChart(days);
+}
+
+function buildDailyPnl(days) {
+  const sells = allTrades.filter(t => t.type === 'SELL' && t.pnl != null && t.time);
+  const cutoff = days > 0 ? Date.now() - days * 86400000 : 0;
+
+  const map = {}; // date string → { pnl, wins, total, vol }
+  sells.forEach(t => {
+    const ts = new Date(t.time).getTime();
+    if (isNaN(ts) || ts < cutoff) return;
+    const day = t.time.slice(0, 10); // "YYYY-MM-DD"
+    if (!map[day]) map[day] = { pnl: 0, wins: 0, total: 0, vol: 0 };
+    const v = parseFloat(t.pnl);
+    if (!isNaN(v)) {
+      map[day].pnl += v;
+      map[day].total++;
+      map[day].vol  += parseFloat(t.amount_sol) || 0;
+      if (v > 0) map[day].wins++;
+    }
+  });
+
+  // Fill missing days with 0
+  if (days > 0) {
+    for (let i = 0; i < days; i++) {
+      const d = new Date(Date.now() - i * 86400000);
+      const key = d.toISOString().slice(0, 10);
+      if (!map[key]) map[key] = { pnl: 0, wins: 0, total: 0, vol: 0 };
+    }
+  }
+
+  return Object.entries(map)
+    .sort(([a], [b]) => a < b ? -1 : 1)
+    .map(([date, d]) => ({ date, ...d, wr: d.total > 0 ? (d.wins / d.total * 100).toFixed(0) : '—' }));
+}
+
+function renderPnlChart(days) {
+  const data   = buildDailyPnl(days);
+  const canvas = document.getElementById('pnlCanvas');
+  if (!canvas || data.length === 0) return;
+
+  const dpr  = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width  = rect.width  + 'px';
+  canvas.style.height = rect.height + 'px';
+
+  const ctx  = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const PAD = { top: 24, right: 20, bottom: 40, left: 64 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top  - PAD.bottom;
+
+  ctx.clearRect(0, 0, W, H);
+
+  const vals   = data.map(d => d.pnl);
+  const maxAbs = Math.max(...vals.map(Math.abs), 0.01);
+  const barW   = Math.max(2, Math.floor(chartW / data.length) - 2);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(30,45,61,0.8)';
+  ctx.lineWidth   = 1;
+  [0.5, 0.25, 0.75, 1].forEach(f => {
+    const y = PAD.top + chartH * f;
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + chartW, y); ctx.stroke();
+  });
+
+  // Zero line
+  const zeroY = PAD.top + chartH * 0.5;
+  ctx.strokeStyle = 'rgba(100,130,160,0.4)';
+  ctx.lineWidth   = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(PAD.left, zeroY); ctx.lineTo(PAD.left + chartW, zeroY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Y-axis labels
+  ctx.fillStyle  = 'rgba(61,82,104,1)';
+  ctx.font       = `${10 * dpr / dpr}px "IBM Plex Mono"`;
+  ctx.textAlign  = 'right';
+  ctx.fillText(`+${maxAbs.toFixed(3)}`, PAD.left - 8, PAD.top + 4);
+  ctx.fillText('0',                     PAD.left - 8, zeroY + 4);
+  ctx.fillText(`-${maxAbs.toFixed(3)}`, PAD.left - 8, PAD.top + chartH + 4);
+
+  // Bars + cumulative line points
+  const linePoints = [];
+  let cumulative = 0;
+
+  data.forEach((d, i) => {
+    const x    = PAD.left + (i / data.length) * chartW + (chartW / data.length - barW) / 2;
+    const norm = d.pnl / maxAbs; // -1 to +1
+    const barH = Math.abs(norm) * (chartH / 2);
+    const y    = d.pnl >= 0 ? zeroY - barH : zeroY;
+
+    // Bar
+    ctx.fillStyle = d.pnl >= 0
+      ? 'rgba(0,255,136,0.7)'
+      : 'rgba(255,61,107,0.7)';
+    ctx.fillRect(x, y, barW, Math.max(barH, 1));
+
+    // Cumulative line point (center of bar)
+    cumulative += d.pnl;
+    const cx = x + barW / 2;
+    const cy = zeroY - (cumulative / maxAbs) * (chartH / 2);
+    linePoints.push([cx, cy]);
+  });
+
+  // Draw cumulative PnL line
+  if (linePoints.length > 1) {
+    ctx.strokeStyle = 'rgba(0,212,255,0.8)';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    linePoints.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.stroke();
+
+    // Dots on line
+    ctx.fillStyle = 'rgba(0,212,255,1)';
+    linePoints.forEach(([x, y]) => {
+      ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+
+  // X-axis date labels (show every Nth)
+  const step = Math.max(1, Math.floor(data.length / 8));
+  ctx.fillStyle = 'rgba(61,82,104,1)';
+  ctx.textAlign = 'center';
+  data.forEach((d, i) => {
+    if (i % step !== 0 && i !== data.length - 1) return;
+    const x = PAD.left + (i / data.length) * chartW + (chartW / data.length) / 2;
+    ctx.fillText(d.date.slice(5), x, H - PAD.bottom + 14); // "MM-DD"
+  });
+
+  // ── Daily breakdown table ──────────────────────────────────────────────────
+  const maxBarPnl = Math.max(...data.map(d => Math.abs(d.pnl)), 0.001);
+  const sorted    = [...data].reverse(); // newest first
+
+  document.getElementById('dailyRows').innerHTML = sorted.map(d => {
+    const pnlCls  = d.pnl >= 0 ? 'pos' : 'neg';
+    const barPct  = (Math.abs(d.pnl) / maxBarPnl * 100).toFixed(1);
+    const barClr  = d.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const wrCls   = d.wr !== '—' && parseInt(d.wr) >= 50 ? 'pos' : 'neg';
+    return `<div class="daily-row">
+      <div class="date-col">${d.date}</div>
+      <div class="bar-col"><div class="daily-bar-track"><div class="daily-bar-fill" style="width:${barPct}%;background:${barClr}"></div></div></div>
+      <div class="pnl-col ${pnlCls}">${d.pnl >= 0 ? '+' : ''}${d.pnl.toFixed(4)}</div>
+      <div class="trades-col">${d.total}</div>
+      <div class="vol-col">${d.vol.toFixed(2)}</div>
+      <div class="wr-col ${d.wr !== '—' ? wrCls : ''}">${d.wr}${d.wr !== '—' ? '%' : ''}</div>
+    </div>`;
+  }).join('');
 }
 
 // Init
