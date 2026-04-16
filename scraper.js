@@ -3,8 +3,8 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 
 const WALLET = 'AyMTHSbURADUynv9W83yypTNiNRzU59PpCWGkqyMegGQ';
-const OUTPUT_FILE = 'trades.json';
-const MAX_PAGES = 2000; // ~40000 trades max at 20/page
+const OUTPUT_FILE = require('path').join(__dirname, 'trades.json');
+const MAX_PAGES = 25; // 25 x 20 = 500 trades
 
 function findChrome() {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
@@ -76,7 +76,7 @@ async function scrapeGMGN() {
   }
 
   // ── Fetch first page and dump its full structure ───────────────────────────
-  const BASE = `https://gmgn.ai/api/v1/wallet_activity/sol?wallet=${WALLET}&limit=100&size=100&page_size=100`;
+  const BASE = `https://gmgn.ai/api/v1/wallet_activity/sol?wallet=${WALLET}&limit=20`;
   console.log('\n[page 1] fetching...');
   const { status, text } = await fetchJson(page, BASE);
   console.log(`[page 1] status: ${status}`);
@@ -114,14 +114,17 @@ async function scrapeGMGN() {
   const addTrades = (arr) => {
     arr.forEach(item => {
       const t = normalizeItem(item);
-      if (t.token === '?') return;
+      // keep all items, even unknown tokens
       const key = t.tx || `${t.time}_${t.token}_${t.amount_sol}`;
       tradeMap.set(key, t);
     });
   };
 
   addTrades(firstPage);
-  console.log(`\n[page 1] ${firstPage.length} items, ${tradeMap.size} trades total`);
+  console.log(`\n[page 1] ${firstPage.length} items → ${tradeMap.size} in map`);
+  if (tradeMap.size === 0 && firstPage.length > 0) {
+    console.log('[debug] sample item:', JSON.stringify(firstPage[0]).slice(0,300));
+  }
 
   // Detect pagination style
   const d = json.data || json;
