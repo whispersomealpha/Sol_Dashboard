@@ -478,7 +478,7 @@
   </div>
   <div class="header-right">
     <div class="last-updated"><span class="live-dot"></span><span id="lastUpdated">—</span></div>
-    <button class="refresh-btn" onclick="loadData()">⟳ REFRESH</button>
+    <button class="refresh-btn" id="refreshBtn" onclick="triggerScrape()">⟳ REFRESH</button>
   </div>
 </div>
 
@@ -754,6 +754,27 @@ function renderTable() {
   }).join('');
 
   document.getElementById('tableBody').innerHTML = rows;
+}
+
+
+async function triggerScrape() {
+  const btn = document.getElementById('refreshBtn');
+  btn.textContent = '⟳ SCRAPING...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/scrape', { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      await loadData();
+    } else {
+      alert('Scrape status: ' + data.message);
+    }
+  } catch(e) {
+    // If no server (local file), just reload data
+    await loadData();
+  }
+  btn.textContent = '⟳ REFRESH';
+  btn.disabled = false;
 }
 
 // Init
