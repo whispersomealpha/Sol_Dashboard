@@ -774,7 +774,8 @@ async function loadData() {
 }
 
 function computeStats(trades) {
-  const sells = trades.filter(t => t.type === 'SELL' && t.pnl != null);
+  const enrichedForStats = getTradesPnl ? getTradesPnl(trades) : trades;
+  const sells = enrichedForStats.filter(t => t.type === 'SELL' && t.pnl != null);
   let totalPnl = 0, wins = 0;
   sells.forEach(t => {
     const v = parseFloat(t.pnl);
@@ -1037,26 +1038,75 @@ function setRange(days, btn) {
   renderPnlChart(days);
 }
 
-function buildDailyPnl(days) {
-  const sells = allTrades.filter(t => t.type === 'SELL' && t.pnl != null && t.time);
-  const cutoff = days > 0 ? Date.now() - days * 86400000 : 0;
+// Compute PnL per trade using best available method:
+// 1. realized_profit field (direct from API)
+// 2. cost_usd - buy_cost_usd (USD difference, GMGN provides both)
+// 3. FIFO matching of buys→sells per token in SOL
+function getTradesPnl(trades) {
+  // Method 1 & 2: use GMGN-provided fields where available
+  const result = trades.map(t => ({ ...t }));
 
-  const map = {}; // date string → { pnl, wins, total, vol }
-  sells.forEach(t => {
-    const ts = new Date(t.time).getTime();
-    if (isNaN(ts) || ts < cutoff) return;
-    const day = t.time.slice(0, 10); // "YYYY-MM-DD"
-    if (!map[day]) map[day] = { pnl: 0, wins: 0, total: 0, vol: 0 };
-    const v = parseFloat(t.pnl);
-    if (!isNaN(v)) {
-      map[day].pnl += v;
-      map[day].total++;
-      map[day].vol  += parseFloat(t.amount_sol) || 0;
-      if (v > 0) map[day].wins++;
+  result.forEach(t => {
+    if (t.pnl != null) return; // already have it
+    if (t.type === 'SELL' && t.cost_usd != null && t.buy_cost_usd != null) {
+      const sold    = parseFloat(t.cost_usd);     // USD value at sell
+      const bought  = parseFloat(t.buy_cost_usd); // USD cost at buy
+      if (!isNaN(sold) && !isNaN(bought)) {
+        // Convert USD pnl to SOL estimate using sell price
+        const solReceived = parseFloat(t.amount_sol) || 0;
+        const solSpent    = solReceived * (bought / sold); // proportional estimate
+        t.pnl_usd = String((sold - bought).toFixed(4));
+        t.pnl = String((solReceived - solSpent).toFixed(6));
+      }
     }
   });
 
-  // Fill missing days with 0
+  // Method 3: FIFO per token for anything still missing
+  const buyQueues = {}; // token → [{solAmt, tokAmt}]
+  result.forEach(t => {
+    const sym = t.token;
+    if (t.type === 'BUY') {
+      if (!buyQueues[sym]) buyQueues[sym] = [];
+      buyQueues[sym].push({ sol: parseFloat(t.amount_sol) || 0, tok: parseFloat(t.amount_token) || 0 });
+    } else if (t.type === 'SELL' && t.pnl == null) {
+      const queue = buyQueues[sym] || [];
+      const tokSold = parseFloat(t.amount_token) || 0;
+      const solReceived = parseFloat(t.amount_sol) || 0;
+      let solCost = 0, remaining = tokSold;
+      for (const buy of queue) {
+        if (remaining <= 0) break;
+        const used = Math.min(buy.tok, remaining);
+        if (buy.tok > 0) solCost += (used / buy.tok) * buy.sol;
+        buy.tok -= used;
+        remaining -= used;
+      }
+      // Remove depleted buys
+      buyQueues[sym] = queue.filter(b => b.tok > 0.000001);
+      if (solCost > 0) t.pnl = String((solReceived - solCost).toFixed(6));
+    }
+  });
+
+  return result;
+}
+
+function buildDailyPnl(days) {
+  const enriched = getTradesPnl(allTrades);
+  const sells  = enriched.filter(t => t.type === 'SELL' && t.time);
+  const cutoff = days > 0 ? Date.now() - days * 86400000 : 0;
+
+  const map = {};
+  sells.forEach(t => {
+    const ts = new Date(t.time).getTime();
+    if (isNaN(ts) || ts < cutoff) return;
+    const day = t.time.slice(0, 10);
+    if (!map[day]) map[day] = { pnl: 0, wins: 0, total: 0, vol: 0 };
+    const v = t.pnl != null ? parseFloat(t.pnl) : 0;
+    map[day].pnl += isNaN(v) ? 0 : v;
+    map[day].total++;
+    map[day].vol += parseFloat(t.amount_sol) || 0;
+    if (!isNaN(v) && v > 0) map[day].wins++;
+  });
+
   if (days > 0) {
     for (let i = 0; i < days; i++) {
       const d = new Date(Date.now() - i * 86400000);
