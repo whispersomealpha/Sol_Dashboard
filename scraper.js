@@ -4,7 +4,7 @@ const { execSync } = require('child_process');
 
 const WALLET = 'AyMTHSbURADUynv9W83yypTNiNRzU59PpCWGkqyMegGQ';
 const OUTPUT_FILE = 'trades.json';
-const MAX_PAGES = 200;
+const MAX_PAGES = 2000; // ~40000 trades max at 20/page
 
 function findChrome() {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
@@ -76,7 +76,7 @@ async function scrapeGMGN() {
   }
 
   // ── Fetch first page and dump its full structure ───────────────────────────
-  const BASE = `https://gmgn.ai/api/v1/wallet_activity/sol?wallet=${WALLET}&limit=100`;
+  const BASE = `https://gmgn.ai/api/v1/wallet_activity/sol?wallet=${WALLET}&limit=100&size=100&page_size=100`;
   console.log('\n[page 1] fetching...');
   const { status, text } = await fetchJson(page, BASE);
   console.log(`[page 1] status: ${status}`);
