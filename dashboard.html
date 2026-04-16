@@ -1091,6 +1091,23 @@ function getTradesPnl(trades) {
   return trades.map(t => sorted.find(s => (s.tx && s.tx === t.tx) || (s.time === t.time && s.token === t.token && s.amount_sol === t.amount_sol)) || t);
 }
 
+
+function debugPnl() {
+  const enriched = getTradesPnl(allTrades);
+  const sells = enriched.filter(t => t.type === 'SELL' && t.pnl != null);
+  sells.sort((a,b) => new Date(b.time) - new Date(a.time));
+  console.table(sells.slice(0,20).map(t => ({
+    time: t.time,
+    token: t.token,
+    sol_received: parseFloat(t.amount_sol).toFixed(4),
+    pnl: parseFloat(t.pnl).toFixed(4),
+  })));
+  // Also show raw sample
+  console.log('Raw sample (first 3 trades):');
+  allTrades.slice(0,3).forEach(t => console.log(t));
+}
+window.debugPnl = debugPnl;
+
 function buildDailyPnl(days) {
   const enriched = getTradesPnl(allTrades);
   const sells  = enriched.filter(t => t.type === 'SELL' && t.time);
