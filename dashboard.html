@@ -1044,38 +1044,16 @@ function setRange(days, btn) {
 // 3. FIFO matching of buys→sells per token in SOL
 
 function getTradesPnl(trades) {
-  // Simple: PnL per day = sum(SOL received from sells) - sum(SOL spent on buys)
-  // Group by day, then per day: pnl = sells_sol - buys_sol
-  // Assign pnl to each sell proportionally for the per-row display
-  
-  const sorted = [...trades].sort((a, b) => new Date(a.time) - new Date(b.time));
-  
-  // For per-row pnl: simple FIFO match within token+address
-  // buy queue per token: stack of { sol }
-  const buyQueues = {};
-
-  sorted.forEach(t => {
-    const key    = t.token_address || t.token;
-    const solAmt = parseFloat(t.amount_sol) || 0;
-
-    if (t.type === 'BUY') {
-      if (!buyQueues[key]) buyQueues[key] = [];
-      buyQueues[key].push(solAmt);
-      t.pnl = null;
-    } else if (t.type === 'SELL') {
-      const queue = buyQueues[key];
-      if (!queue || queue.length === 0) {
-        t.pnl = null; // no matching buy in window
-        return;
-      }
-      const buySol = queue.shift(); // FIFO: take oldest buy
-      t.pnl = String((solAmt - buySol).toFixed(6));
-    }
-  });
-
-  return trades.map(t => sorted.find(s =>
-    s.tx ? s.tx === t.tx : (s.time === t.time && s.token === t.token)
-  ) || t);
+  // Debug: log April 15 trades sorted by sol amount
+  const apr15 = trades.filter(t => t.time && t.time.startsWith('2026-04-15'));
+  apr15.sort((a,b) => parseFloat(b.amount_sol) - parseFloat(a.amount_sol));
+  console.log('=== APR 15 TRADES (sorted by SOL, top 10) ===');
+  apr15.slice(0,10).forEach(t => console.log(
+    t.type, t.token.padEnd(12), 'sol:', parseFloat(t.amount_sol).toFixed(4), 'tok:', parseFloat(t.amount_token).toFixed(0)
+  ));
+  console.log('Total APR15 buys SOL:', apr15.filter(t=>t.type==='BUY').reduce((s,t)=>s+parseFloat(t.amount_sol),0).toFixed(4));
+  console.log('Total APR15 sells SOL:', apr15.filter(t=>t.type==='SELL').reduce((s,t)=>s+parseFloat(t.amount_sol),0).toFixed(4));
+  return trades;
 }
 
 
