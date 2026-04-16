@@ -1,0 +1,19 @@
+{
+  "wallet": "AyMTHSbURADUynv9W83yypTNiNRzU59PpCWGkqyMegGQ",
+  "scraped_at": "2026-04-16T06:30:00.000Z",
+  "source": "api_intercept",
+  "trades": [
+    { "time": "2026-04-16 05:12:33", "type": "BUY", "token": "BONK", "token_address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "amount_token": "12450000", "amount_sol": "1.24", "price_usd": "0.00002180", "pnl": null, "tx": "5xK9ab3f" },
+    { "time": "2026-04-16 04:58:11", "type": "SELL", "token": "WIF", "token_address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", "amount_token": "340", "amount_sol": "2.89", "price_usd": "1.8820", "pnl": "+0.44", "tx": "3mP2cc91" },
+    { "time": "2026-04-16 03:41:05", "type": "BUY", "token": "POPCAT", "token_address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr", "amount_token": "880", "amount_sol": "0.76", "price_usd": "0.9540", "pnl": null, "tx": "9nQ7e12d" },
+    { "time": "2026-04-15 22:17:49", "type": "SELL", "token": "BONK", "token_address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "amount_token": "8200000", "amount_sol": "0.91", "price_usd": "0.00002440", "pnl": "+0.18", "tx": "2wR4f08b" },
+    { "time": "2026-04-15 19:03:22", "type": "BUY", "token": "FWOG", "token_address": "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump", "amount_token": "55000", "amount_sol": "0.32", "price_usd": "0.0000064", "pnl": null, "tx": "7hY1d44a" },
+    { "time": "2026-04-15 17:55:01", "type": "SELL", "token": "POPCAT", "token_address": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr", "amount_token": "880", "amount_sol": "0.69", "price_usd": "0.8720", "pnl": "-0.07", "tx": "1kZ37c2e" },
+    { "time": "2026-04-15 14:28:37", "type": "BUY", "token": "WIF", "token_address": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", "amount_token": "340", "amount_sol": "2.45", "price_usd": "1.6010", "pnl": null, "tx": "8pL6a91c" },
+    { "time": "2026-04-15 11:14:20", "type": "BUY", "token": "TRUMP", "token_address": "HaP8r3ksG76PhQLTqR8FYBeNiQpejcFbQmiHbg787Ut1", "amount_token": "120", "amount_sol": "1.88", "price_usd": "17.3400", "pnl": null, "tx": "4tM8b55f" },
+    { "time": "2026-04-15 08:02:55", "type": "SELL", "token": "FWOG", "token_address": "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump", "amount_token": "55000", "amount_sol": "0.51", "price_usd": "0.0000102", "pnl": "+0.19", "tx": "6sN2c33d" },
+    { "time": "2026-04-14 23:47:18", "type": "SELL", "token": "TRUMP", "token_address": "HaP8r3ksG76PhQLTqR8FYBeNiQpejcFbQmiHbg787Ut1", "amount_token": "120", "amount_sol": "2.31", "price_usd": "21.2200", "pnl": "+0.43", "tx": "0vB5e77g" },
+    { "time": "2026-04-14 19:31:04", "type": "BUY", "token": "MOODENG", "token_address": "ED5nyyWEzpPPiWimP8vYm7sD7TD3LAt3Q3gRTWHzc8yy", "amount_token": "18000", "amount_sol": "0.55", "price_usd": "0.0000338", "pnl": null, "tx": "3cA9f01h" },
+    { "time": "2026-04-14 14:12:40", "type": "SELL", "token": "MOODENG", "token_address": "ED5nyyWEzpPPiWimP8vYm7sD7TD3LAt3Q3gRTWHzc8yy", "amount_token": "18000", "amount_sol": "0.38", "price_usd": "0.0000233", "pnl": "-0.17", "tx": "2xD0g88i" }
+  ]
+}

@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GMGN Trade History</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080b0f;
+    --bg2: #0d1117;
+    --bg3: #111820;
+    --border: #1e2d3d;
+    --border2: #243447;
+    --accent: #00d4ff;
+    --accent2: #0099cc;
+    --green: #00ff88;
+    --green2: #00cc6a;
+    --red: #ff3d6b;
+    --red2: #cc2f55;
+    --yellow: #ffd700;
+    --text: #c9d8e8;
+    --text2: #6b8299;
+    --text3: #3d5268;
+    --buy-bg: rgba(0, 255, 136, 0.06);
+    --sell-bg: rgba(255, 61, 107, 0.06);
+    --glow-g: 0 0 20px rgba(0,255,136,0.15);
+    --glow-r: 0 0 20px rgba(255,61,107,0.15);
+    --glow-a: 0 0 20px rgba(0,212,255,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Animated corner grid */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0; right: 0;
+    width: 40%;
+    height: 100%;
+    background:
+      linear-gradient(rgba(0,212,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    mask-image: linear-gradient(to left, rgba(0,0,0,0.4), transparent);
+  }
+
+  .header {
+    padding: 28px 36px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    position: relative;
+  }
+
+  .header-left { flex: 1; }
+
+  .tag {
+    display: inline-block;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    border: 1px solid var(--accent2);
+    padding: 3px 8px;
+    margin-bottom: 10px;
+    background: rgba(0,212,255,0.05);
+  }
+
+  h1 {
+    font-family: 'Space Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  h1 span { color: var(--accent); }
+
+  .wallet-addr {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text2);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .wallet-addr a {
+    color: var(--accent2);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .wallet-addr a:hover { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
+  .last-updated {
+    font-size: 10px;
+    color: var(--text3);
+  }
+
+  .refresh-btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.05em;
+  }
+  .refresh-btn:hover {
+    background: rgba(0,212,255,0.08);
+    border-color: var(--accent);
+    box-shadow: var(--glow-a);
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat {
+    padding: 18px 24px;
+    border-right: 1px solid var(--border);
+    position: relative;
+    transition: background 0.2s;
+  }
+  .stat:last-child { border-right: none; }
+  .stat:hover { background: rgba(255,255,255,0.015); }
+
+  .stat-label {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+  }
+
+  .stat-value.positive { color: var(--green); text-shadow: 0 0 12px rgba(0,255,136,0.4); }
+  .stat-value.negative { color: var(--red); text-shadow: 0 0 12px rgba(255,61,107,0.4); }
+  .stat-value.neutral { color: var(--accent); }
+
+  .stat-sub {
+    font-size: 10px;
+    color: var(--text2);
+    margin-top: 4px;
+  }
+
+  /* Controls */
+  .controls {
+    padding: 14px 36px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .filter-group { display: flex; gap: 4px; }
+
+  .filter-btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 5px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+
+  .filter-btn:hover { color: var(--text); border-color: var(--text3); }
+  .filter-btn.active-all { background: rgba(0,212,255,0.1); border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active-buy { background: rgba(0,255,136,0.1); border-color: var(--green); color: var(--green); }
+  .filter-btn.active-sell { background: rgba(255,61,107,0.1); border-color: var(--red); color: var(--red); }
+
+  .search-box {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 5px 12px;
+    width: 200px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box::placeholder { color: var(--text3); }
+  .search-box:focus { border-color: var(--accent2); }
+
+  .controls-right {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.05em;
+  }
+
+  /* Table */
+  .table-wrap {
+    overflow-x: auto;
+    padding: 0 36px 36px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0;
+  }
+
+  thead tr {
+    border-bottom: 1px solid var(--border2);
+  }
+
+  th {
+    padding: 14px 12px;
+    text-align: left;
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-weight: 400;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+  }
+  th:hover { color: var(--text2); }
+  th .sort-arrow { margin-left: 4px; opacity: 0.4; }
+  th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(30,45,61,0.5);
+    transition: background 0.12s;
+    animation: rowIn 0.3s ease both;
+  }
+
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateX(-6px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  tbody tr.buy-row:hover { background: var(--buy-bg); }
+  tbody tr.sell-row:hover { background: var(--sell-bg); }
+
+  td {
+    padding: 12px 12px;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .type-badge {
+    display: inline-block;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 3px 9px;
+    border-radius: 0;
+  }
+  .type-badge.BUY {
+    background: rgba(0,255,136,0.12);
+    color: var(--green);
+    border: 1px solid rgba(0,255,136,0.25);
+  }
+  .type-badge.SELL {
+    background: rgba(255,61,107,0.12);
+    color: var(--red);
+    border: 1px solid rgba(255,61,107,0.25);
+  }
+
+  .token-cell { display: flex; align-items: center; gap: 8px; }
+
+  .token-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    flex-shrink: 0;
+    letter-spacing: 0;
+  }
+
+  .token-name {
+    font-weight: 500;
+    color: #fff;
+    font-size: 12px;
+  }
+
+  .token-addr {
+    font-size: 9px;
+    color: var(--text3);
+    margin-top: 1px;
+  }
+
+  .amount-cell { text-align: right; }
+  .amount-sol { color: var(--text); font-weight: 500; }
+  .amount-token { font-size: 10px; color: var(--text2); margin-top: 1px; }
+
+  .price-cell { color: var(--text2); }
+
+  .pnl-cell {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    font-size: 12px;
+    text-align: right;
+  }
+  .pnl-cell.pos { color: var(--green); }
+  .pnl-cell.neg { color: var(--red); }
+  .pnl-cell.none { color: var(--text3); font-size: 10px; font-weight: 400; font-family: 'IBM Plex Mono', monospace; }
+
+  .time-cell { color: var(--text2); font-size: 11px; }
+
+  .tx-cell a {
+    color: var(--text3);
+    text-decoration: none;
+    font-size: 11px;
+    transition: color 0.15s;
+    border-bottom: 1px solid transparent;
+  }
+  .tx-cell a:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent2);
+  }
+
+  /* PnL bar per row */
+  .pnl-bar-wrap {
+    height: 2px;
+    width: 60px;
+    background: var(--bg3);
+    margin-top: 3px;
+    margin-left: auto;
+    overflow: hidden;
+  }
+  .pnl-bar {
+    height: 100%;
+    transition: width 0.4s ease;
+  }
+
+  /* No data */
+  .no-data {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text3);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Live dot */
+  .live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    margin-right: 6px;
+    box-shadow: 0 0 6px var(--green2);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Loading state */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(8,11,15,0.85);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .loading-overlay.show { display: flex; }
+  .loading-text {
+    font-family: 'Space Mono', monospace;
+    color: var(--accent);
+    font-size: 13px;
+    letter-spacing: 0.1em;
+  }
+  .loading-bar {
+    width: 200px;
+    height: 2px;
+    background: var(--border2);
+    overflow: hidden;
+  }
+  .loading-bar-inner {
+    height: 100%;
+    background: var(--accent);
+    animation: loadBar 1.4s ease-in-out infinite;
+  }
+  @keyframes loadBar {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+
+  /* Token color map */
+  .icon-bonk  { background: rgba(255,165,0,0.15); color: #ffa500; }
+  .icon-wif   { background: rgba(255,105,180,0.15); color: #ff69b4; }
+  .icon-popcat { background: rgba(100,200,255,0.15); color: #64c8ff; }
+  .icon-fwog  { background: rgba(0,200,100,0.15); color: #00c864; }
+  .icon-trump { background: rgba(255,50,50,0.15); color: #ff3232; }
+  .icon-moodeng { background: rgba(180,130,255,0.15); color: #b482ff; }
+  .icon-default { background: rgba(100,130,160,0.15); color: #6482a0; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-text">FETCHING TRADE DATA...</div>
+  <div class="loading-bar"><div class="loading-bar-inner"></div></div>
+</div>
+
+<div class="header">
+  <div class="header-left">
+    <div class="tag">GMGN // SOL // WALLET TRADES</div>
+    <h1>Trade <span>History</span></h1>
+    <div class="wallet-addr">
+      <a id="walletLink" href="#" target="_blank">—</a>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="last-updated"><span class="live-dot"></span><span id="lastUpdated">—</span></div>
+    <button class="refresh-btn" onclick="loadData()">⟳ REFRESH</button>
+  </div>
+</div>
+
+<div class="stats-bar" id="statsBar">
+  <div class="stat">
+    <div class="stat-label">Total Trades</div>
+    <div class="stat-value neutral" id="statTotal">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Realized PnL</div>
+    <div class="stat-value" id="statPnl">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Win Rate</div>
+    <div class="stat-value" id="statWinRate">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Vol (SOL)</div>
+    <div class="stat-value neutral" id="statVol">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Tokens Traded</div>
+    <div class="stat-value neutral" id="statTokens">—</div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="filter-group">
+    <button class="filter-btn active-all" onclick="setFilter('ALL', this)">ALL</button>
+    <button class="filter-btn" onclick="setFilter('BUY', this)">BUY</button>
+    <button class="filter-btn" onclick="setFilter('SELL', this)">SELL</button>
+  </div>
+  <input type="text" class="search-box" placeholder="Search token..." id="searchInput" oninput="renderTable()">
+  <div class="controls-right" id="rowCount">0 trades</div>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th onclick="sortBy('time')">TIME <span class="sort-arrow" id="sort-time">↓</span></th>
+        <th onclick="sortBy('type')">TYPE <span class="sort-arrow" id="sort-type">↕</span></th>
+        <th>TOKEN</th>
+        <th onclick="sortBy('amount_sol')" class="amount-cell">AMOUNT (SOL) <span class="sort-arrow" id="sort-amount_sol">↕</span></th>
+        <th class="price-cell">PRICE (USD)</th>
+        <th onclick="sortBy('pnl')" class="pnl-cell">PnL (SOL) <span class="sort-arrow" id="sort-pnl">↕</span></th>
+        <th>TX</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<script>
+let allTrades = [];
+let currentFilter = 'ALL';
+let currentSort = { key: 'time', dir: -1 };
+const maxPnl = { pos: 0, neg: 0 };
+
+const TOKEN_COLORS = {
+  BONK: 'bonk', WIF: 'wif', POPCAT: 'popcat',
+  FWOG: 'fwog', TRUMP: 'trump', MOODENG: 'moodeng'
+};
+
+function iconClass(sym) {
+  return 'icon-' + (TOKEN_COLORS[sym] || 'default');
+}
+
+function shortAddr(addr) {
+  if (!addr || addr.length < 10) return addr;
+  return addr.slice(0, 4) + '...' + addr.slice(-4);
+}
+
+function formatTokenAmount(amt, sym) {
+  const n = parseFloat(amt);
+  if (isNaN(n)) return amt;
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+async function loadData() {
+  document.getElementById('loadingOverlay').classList.add('show');
+  try {
+    // Try to load trades.json from same directory
+    const res = await fetch('trades.json');
+    if (!res.ok) throw new Error('trades.json not found');
+    const data = await res.json();
+
+    // Support both formats: { trades: [...] } or { api_responses: [...] }
+    let trades = [];
+    if (data.trades && Array.isArray(data.trades)) {
+      trades = data.trades;
+    } else if (data.api_responses && Array.isArray(data.api_responses)) {
+      // Try to extract from intercepted API responses
+      for (const resp of data.api_responses) {
+        const d = resp.data;
+        const arr = d?.data?.activities || d?.activities || d?.data || d?.trades || d?.result || [];
+        if (Array.isArray(arr)) trades.push(...arr);
+      }
+    } else if (data.rows && Array.isArray(data.rows)) {
+      // DOM-scraped rows — parse best-effort
+      trades = data.rows.map(r => ({
+        time: '',
+        type: r.text?.includes('Buy') || r.text?.includes('buy') ? 'BUY' : 'SELL',
+        token: r.text?.split('\n')[0] || '—',
+        amount_sol: '—',
+        price_usd: '—',
+        pnl: null,
+        tx: ''
+      }));
+    }
+
+    allTrades = trades;
+
+    // Update wallet link
+    const wallet = data.wallet || '';
+    const walletEl = document.getElementById('walletLink');
+    walletEl.textContent = wallet;
+    walletEl.href = `https://gmgn.ai/sol/address/${wallet}`;
+
+    // Updated time
+    const ts = data.scraped_at ? new Date(data.scraped_at).toLocaleString() : new Date().toLocaleString();
+    document.getElementById('lastUpdated').textContent = ts;
+
+    computeStats(trades);
+    renderTable();
+  } catch (e) {
+    document.getElementById('tableBody').innerHTML = `
+      <tr><td colspan="7" class="no-data">
+        ⚠ Could not load trades.json<br>
+        <span style="font-size:10px;margin-top:8px;display:block">Run: <code style="color:var(--accent)">node scraper.js</code> first, then open this file</span>
+      </td></tr>`;
+  }
+  document.getElementById('loadingOverlay').classList.remove('show');
+}
+
+function computeStats(trades) {
+  const sells = trades.filter(t => t.type === 'SELL' && t.pnl != null);
+  let totalPnl = 0, wins = 0;
+  sells.forEach(t => {
+    const v = parseFloat(t.pnl);
+    if (!isNaN(v)) {
+      totalPnl += v;
+      if (v > 0) wins++;
+    }
+  });
+
+  const totalVol = trades.reduce((s, t) => s + (parseFloat(t.amount_sol) || 0), 0);
+  const tokens = new Set(trades.map(t => t.token).filter(Boolean)).size;
+  const winRate = sells.length > 0 ? (wins / sells.length * 100).toFixed(0) : 0;
+
+  document.getElementById('statTotal').textContent = trades.length;
+  const pnlEl = document.getElementById('statPnl');
+  pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(3) + ' SOL';
+  pnlEl.className = 'stat-value ' + (totalPnl >= 0 ? 'positive' : 'negative');
+  const wrEl = document.getElementById('statWinRate');
+  wrEl.textContent = winRate + '%';
+  wrEl.className = 'stat-value ' + (winRate >= 50 ? 'positive' : 'negative');
+  document.getElementById('statVol').textContent = totalVol.toFixed(2);
+  document.getElementById('statTokens').textContent = tokens;
+
+  // Compute max pnl for bar scaling
+  sells.forEach(t => {
+    const v = parseFloat(t.pnl);
+    if (!isNaN(v)) {
+      if (v > 0) maxPnl.pos = Math.max(maxPnl.pos, v);
+      if (v < 0) maxPnl.neg = Math.max(maxPnl.neg, Math.abs(v));
+    }
+  });
+}
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.className = 'filter-btn');
+  btn.className = `filter-btn active-${f.toLowerCase()}`;
+  renderTable();
+}
+
+function sortBy(key) {
+  if (currentSort.key === key) {
+    currentSort.dir *= -1;
+  } else {
+    currentSort.key = key;
+    currentSort.dir = -1;
+  }
+  document.querySelectorAll('.sort-arrow').forEach(el => el.textContent = '↕');
+  const arrow = document.getElementById(`sort-${key}`);
+  if (arrow) arrow.textContent = currentSort.dir === -1 ? '↓' : '↑';
+  document.querySelectorAll('th').forEach(th => th.classList.remove('sorted'));
+  event.currentTarget.classList.add('sorted');
+  renderTable();
+}
+
+function renderTable() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  let trades = allTrades.filter(t => {
+    if (currentFilter !== 'ALL' && t.type !== currentFilter) return false;
+    if (search && !(t.token || '').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  // Sort
+  trades.sort((a, b) => {
+    const k = currentSort.key;
+    let av = a[k], bv = b[k];
+    if (k === 'time') {
+      av = new Date(av).getTime() || 0;
+      bv = new Date(bv).getTime() || 0;
+    } else if (k === 'amount_sol' || k === 'pnl') {
+      av = parseFloat(av) || -Infinity;
+      bv = parseFloat(bv) || -Infinity;
+    }
+    return av < bv ? currentSort.dir : av > bv ? -currentSort.dir : 0;
+  });
+
+  document.getElementById('rowCount').textContent = `${trades.length} trade${trades.length !== 1 ? 's' : ''}`;
+
+  if (trades.length === 0) {
+    document.getElementById('tableBody').innerHTML =
+      `<tr><td colspan="7" class="no-data">No trades match the current filter.</td></tr>`;
+    return;
+  }
+
+  const rows = trades.map((t, i) => {
+    const isBuy = t.type === 'BUY';
+    const rowClass = isBuy ? 'buy-row' : 'sell-row';
+    const tokenSym = (t.token || '').toUpperCase();
+    const pnlVal = parseFloat(t.pnl);
+    const hasPnl = !isNaN(pnlVal) && t.pnl != null;
+
+    let pnlHtml = `<td class="pnl-cell none">—</td>`;
+    if (hasPnl) {
+      const cls = pnlVal >= 0 ? 'pos' : 'neg';
+      const barColor = pnlVal >= 0 ? 'var(--green)' : 'var(--red)';
+      const barPct = pnlVal >= 0
+        ? (maxPnl.pos > 0 ? Math.round(Math.abs(pnlVal) / maxPnl.pos * 100) : 0)
+        : (maxPnl.neg > 0 ? Math.round(Math.abs(pnlVal) / maxPnl.neg * 100) : 0);
+      pnlHtml = `<td class="pnl-cell ${cls}">
+        ${pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(3)}
+        <div class="pnl-bar-wrap"><div class="pnl-bar" style="width:${barPct}%;background:${barColor}"></div></div>
+      </td>`;
+    }
+
+    const txHash = t.tx || '';
+    const txHtml = txHash
+      ? `<a href="https://solscan.io/tx/${txHash}" target="_blank">${txHash.slice(0, 8)}…</a>`
+      : '—';
+
+    const delay = Math.min(i * 30, 300);
+
+    return `<tr class="${rowClass}" style="animation-delay:${delay}ms">
+      <td class="time-cell">${t.time || '—'}</td>
+      <td><span class="type-badge ${t.type}">${t.type}</span></td>
+      <td>
+        <div class="token-cell">
+          <div class="token-icon ${iconClass(tokenSym)}">${tokenSym.slice(0,3)}</div>
+          <div>
+            <div class="token-name">${tokenSym}</div>
+            <div class="token-addr">${shortAddr(t.token_address || '')}</div>
+          </div>
+        </div>
+      </td>
+      <td class="amount-cell">
+        <div class="amount-sol">${parseFloat(t.amount_sol || 0).toFixed(3)} SOL</div>
+        <div class="amount-token">${formatTokenAmount(t.amount_token || '—', tokenSym)}</div>
+      </td>
+      <td class="price-cell">$${parseFloat(t.price_usd || 0).toFixed(t.price_usd > 1 ? 2 : 8)}</td>
+      ${pnlHtml}
+      <td class="tx-cell">${txHtml}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('tableBody').innerHTML = rows;
+}
+
+// Init
+loadData();
+</script>
+</body>
+</html>
