@@ -699,8 +699,26 @@ function renderTable() {
   document.getElementById('rowCount').textContent = `${trades.length} trade${trades.length !== 1 ? 's' : ''}`;
 
   if (trades.length === 0) {
-    document.getElementById('tableBody').innerHTML =
-      `<tr><td colspan="7" class="no-data">No trades match the current filter.</td></tr>`;
+    const hasFilter = currentFilter !== 'ALL' || document.getElementById('searchInput').value;
+    if (hasFilter) {
+      document.getElementById('tableBody').innerHTML =
+        `<tr><td colspan="7" class="no-data">No trades match the current filter.</td></tr>`;
+    } else {
+      document.getElementById('tableBody').innerHTML =
+        `<tr><td colspan="7" class="no-data" id="emptyState">
+          <div style="margin-bottom:12px;font-size:14px;color:var(--accent)">⚠ No trade data yet</div>
+          <div style="margin-bottom:16px;color:var(--text2);font-size:11px">GMGN requires session cookies to return data.</div>
+          <div style="text-align:left;max-width:560px;margin:0 auto;background:var(--bg3);border:1px solid var(--border2);padding:16px;font-size:11px;line-height:1.8">
+            <div style="color:var(--yellow);margin-bottom:8px;font-size:10px;letter-spacing:0.1em">HOW TO FIX:</div>
+            <div>1. Open <a href="https://gmgn.ai" target="_blank" style="color:var(--accent)">gmgn.ai</a> in Chrome and log in</div>
+            <div>2. Open DevTools → <b>F12</b> → Application tab → Storage → Cookies → <b>https://gmgn.ai</b></div>
+            <div>3. Copy all cookie values as: <code style="color:var(--green)">name1=value1; name2=value2; ...</code></div>
+            <div>4. In Railway → your service → <b>Variables</b> → add:</div>
+            <div style="margin:8px 0 8px 16px;color:var(--green)">GMGN_COOKIES = &lt;paste your cookies here&gt;</div>
+            <div>5. Redeploy and click <b>REFRESH</b> again</div>
+          </div>
+        </td></tr>`;
+    }
     return;
   }
 
@@ -761,24 +779,37 @@ async function triggerScrape() {
   const btn = document.getElementById('refreshBtn');
   btn.textContent = '⟳ SCRAPING...';
   btn.disabled = true;
+  document.getElementById('loadingOverlay').classList.add('show');
+
   try {
     const res = await fetch('/scrape', { method: 'POST' });
     const data = await res.json();
-    if (data.status === 'ok') {
-      await loadData();
-    } else {
-      alert('Scrape status: ' + data.message);
-    }
+    if (data.log) showScrapeLog(data.log);
+    await loadData();
   } catch(e) {
-    // If no server (local file), just reload data
     await loadData();
   }
   btn.textContent = '⟳ REFRESH';
   btn.disabled = false;
+  document.getElementById('loadingOverlay').classList.remove('show');
+}
+
+function showScrapeLog(log) {
+  const noData = document.getElementById('noDataPanel');
+  if (!noData) return;
+  noData.querySelector('.log-output').textContent = log;
+  noData.style.display = 'block';
 }
 
 // Init
 loadData();
 </script>
+<div id="noDataPanel" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border2);padding:12px 36px;z-index:200">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <span style="font-size:10px;color:var(--text3);letter-spacing:0.1em">SCRAPE LOG</span>
+    <button onclick="document.getElementById('noDataPanel').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">✕</button>
+  </div>
+  <pre class="log-output" style="font-size:10px;color:var(--text2);max-height:120px;overflow-y:auto;white-space:pre-wrap;word-break:break-all"></pre>
+</div>
 </body>
 </html>

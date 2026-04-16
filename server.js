@@ -6,52 +6,48 @@ const { execFile } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const TRADES_FILE = path.join(__dirname, 'trades.json');
+const DEBUG_FILE = path.join(__dirname, 'trades_debug.json');
 
-// ── Serve static files (dashboard.html, trades.json) ─────────────────────────
 app.use(express.static(__dirname));
 
-// ── GET /trades.json — always return latest data ──────────────────────────────
 app.get('/trades.json', (req, res) => {
   if (fs.existsSync(TRADES_FILE)) {
     res.sendFile(TRADES_FILE);
   } else {
-    res.json({ wallet: '', scraped_at: null, trades: [], error: 'No data yet. Hit /scrape first.' });
+    res.json({ wallet: '', scraped_at: null, trades: [], error: 'No data yet. Click REFRESH to scrape.' });
   }
 });
 
-// ── POST /scrape — trigger the scraper ────────────────────────────────────────
+app.get('/debug.json', (req, res) => {
+  if (fs.existsSync(DEBUG_FILE)) res.sendFile(DEBUG_FILE);
+  else res.json({ message: 'No debug data yet — run a scrape first' });
+});
+
 let scraping = false;
+let lastLog = '';
 
 app.post('/scrape', (req, res) => {
-  if (scraping) {
-    return res.json({ status: 'busy', message: 'Scrape already in progress' });
-  }
+  if (scraping) return res.json({ status: 'busy', message: 'Scrape already in progress' });
   scraping = true;
-  console.log('[scrape] Starting...');
+  lastLog = '';
+  console.log('[server] Scrape triggered');
 
-  execFile('node', [path.join(__dirname, 'scraper.js')], { timeout: 120000 }, (err, stdout, stderr) => {
+  execFile('node', [path.join(__dirname, 'scraper.js')], { timeout: 180000 }, (err, stdout, stderr) => {
     scraping = false;
-    if (err) {
-      console.error('[scrape] Error:', err.message);
-      return res.json({ status: 'error', message: err.message, stderr });
+    lastLog = stdout + stderr;
+    console.log('[server] Scrape finished');
+    console.log(lastLog);
+    if (err && !fs.existsSync(TRADES_FILE)) {
+      return res.json({ status: 'error', message: err.message, log: lastLog });
     }
-    console.log('[scrape] Done.');
-    res.json({ status: 'ok', message: 'Scrape complete', log: stdout });
+    res.json({ status: 'ok', log: lastLog });
   });
 });
 
-// ── GET /scrape/status ────────────────────────────────────────────────────────
 app.get('/scrape/status', (req, res) => {
-  res.json({ scraping, hasData: fs.existsSync(TRADES_FILE) });
+  res.json({ scraping, hasData: fs.existsSync(TRADES_FILE), log: lastLog });
 });
 
-// ── Root → dashboard ─────────────────────────────────────────────────────────
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dashboard.html'));
-});
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
 
-app.listen(PORT, () => {
-  console.log(`✅ Sol Dashboard running on port ${PORT}`);
-  console.log(`   Dashboard: http://localhost:${PORT}`);
-  console.log(`   Trigger scrape: POST http://localhost:${PORT}/scrape`);
-});
+app.listen(PORT, () => console.log(`Sol Dashboard on port ${PORT}`));
