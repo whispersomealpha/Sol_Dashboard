@@ -31,17 +31,26 @@ function normalizeItem(item) {
   const symbol = info.symbol || item.token_symbol || item.symbol || '?';
   const addr   = info.address || item.token_address || item.contract_address || '';
   const ts     = item.timestamp ? new Date(item.timestamp * 1000).toISOString().replace('T',' ').slice(0,19) : '';
-  const solAmt = item.cost_sol || item.sol_amount || item.quote_amount || item.amount_sol || '';
-  const tokAmt = item.token_amount || item.base_amount || item.amount_token || '';
-  const price  = item.price || item.price_usd || info.price || '';
-  const pnl    = item.realized_profit != null ? item.realized_profit : item.pnl ?? null;
-  const tx     = item.tx_hash || item.signature || item.transaction_hash || item.tx || '';
+
+  // quote_amount = SOL spent (buy) or SOL received (sell) — the key SOL field
+  const solAmt = parseFloat(item.quote_amount || item.cost_sol || item.sol_amount || item.amount_sol || 0);
+  const tokAmt = parseFloat(item.token_amount || item.base_amount || item.amount_token || 0);
+  const price  = item.price_usd || item.price || info.price || '';
+  const tx     = item.tx_hash   || item.signature || item.transaction_hash || item.tx || '';
+
   return {
-    time: ts, type: isBuy ? 'BUY' : 'SELL', token: symbol, token_address: addr,
-    amount_token: String(tokAmt), amount_sol: String(solAmt),
-    price_usd: String(price), pnl: pnl != null ? String(pnl) : null, tx,
+    time: ts,
+    type: isBuy ? 'BUY' : 'SELL',
+    token: symbol,
+    token_address: addr,
+    amount_token: String(tokAmt),
+    amount_sol:   String(solAmt),
+    price_usd:    String(price),
+    pnl:          null,   // computed client-side via FIFO SOL matching
+    tx,
   };
 }
+
 
 async function fetchJson(page, url) {
   const response = await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });

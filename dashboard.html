@@ -1043,50 +1043,52 @@ function setRange(days, btn) {
 // 2. cost_usd - buy_cost_usd (USD difference, GMGN provides both)
 // 3. FIFO matching of buys→sells per token in SOL
 function getTradesPnl(trades) {
-  // Method 1 & 2: use GMGN-provided fields where available
-  const result = trades.map(t => ({ ...t }));
+  // Pure SOL FIFO: for each token, match buy SOL cost against sell SOL proceeds
+  // quote_amount = SOL spent (buy) or SOL received (sell) — stored as amount_sol
+  const sorted = [...trades].sort((a, b) => new Date(a.time) - new Date(b.time)); // oldest first
 
-  result.forEach(t => {
-    if (t.pnl != null) return; // already have it
-    if (t.type === 'SELL' && t.cost_usd != null && t.buy_cost_usd != null) {
-      const sold    = parseFloat(t.cost_usd);     // USD value at sell
-      const bought  = parseFloat(t.buy_cost_usd); // USD cost at buy
-      if (!isNaN(sold) && !isNaN(bought)) {
-        // Convert USD pnl to SOL estimate using sell price
-        const solReceived = parseFloat(t.amount_sol) || 0;
-        const solSpent    = solReceived * (bought / sold); // proportional estimate
-        t.pnl_usd = String((sold - bought).toFixed(4));
-        t.pnl = String((solReceived - solSpent).toFixed(6));
-      }
-    }
-  });
+  const buyQueues = {}; // token → [ { solPerTok } ]  (cost basis per token unit)
 
-  // Method 3: FIFO per token for anything still missing
-  const buyQueues = {}; // token → [{solAmt, tokAmt}]
-  result.forEach(t => {
-    const sym = t.token;
+  sorted.forEach(t => {
+    const sym      = t.token;
+    const solAmt   = parseFloat(t.amount_sol)   || 0;
+    const tokAmt   = parseFloat(t.amount_token) || 0;
+
     if (t.type === 'BUY') {
       if (!buyQueues[sym]) buyQueues[sym] = [];
-      buyQueues[sym].push({ sol: parseFloat(t.amount_sol) || 0, tok: parseFloat(t.amount_token) || 0 });
-    } else if (t.type === 'SELL' && t.pnl == null) {
-      const queue = buyQueues[sym] || [];
-      const tokSold = parseFloat(t.amount_token) || 0;
-      const solReceived = parseFloat(t.amount_sol) || 0;
-      let solCost = 0, remaining = tokSold;
-      for (const buy of queue) {
-        if (remaining <= 0) break;
-        const used = Math.min(buy.tok, remaining);
-        if (buy.tok > 0) solCost += (used / buy.tok) * buy.sol;
-        buy.tok -= used;
-        remaining -= used;
+      if (tokAmt > 0) {
+        buyQueues[sym].push({ tokRemaining: tokAmt, solCostPerTok: solAmt / tokAmt });
       }
-      // Remove depleted buys
-      buyQueues[sym] = queue.filter(b => b.tok > 0.000001);
-      if (solCost > 0) t.pnl = String((solReceived - solCost).toFixed(6));
+      t.pnl = null; // buys never have PnL
+
+    } else if (t.type === 'SELL') {
+      const queue      = buyQueues[sym] || [];
+      const solReceived = solAmt;
+      let   solCostBasis = 0;
+      let   remaining    = tokAmt;
+
+      for (const lot of queue) {
+        if (remaining <= 0) break;
+        const used = Math.min(lot.tokRemaining, remaining);
+        solCostBasis       += used * lot.solCostPerTok;
+        lot.tokRemaining   -= used;
+        remaining          -= used;
+      }
+
+      // Clean up depleted lots
+      buyQueues[sym] = queue.filter(l => l.tokRemaining > 1e-9);
+
+      // Only assign PnL if we had a matching buy
+      if (solCostBasis > 0) {
+        t.pnl = String((solReceived - solCostBasis).toFixed(6));
+      } else {
+        t.pnl = null; // no buy history in window — can't compute
+      }
     }
   });
 
-  return result;
+  // Return in original order (newest first)
+  return trades.map(t => sorted.find(s => (s.tx && s.tx === t.tx) || (s.time === t.time && s.token === t.token && s.amount_sol === t.amount_sol)) || t);
 }
 
 function buildDailyPnl(days) {
