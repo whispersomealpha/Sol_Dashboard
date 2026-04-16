@@ -459,6 +459,14 @@
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border2); }
   ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+  /* New trade flash */
+  @keyframes newTrade {
+    0%   { background: rgba(0,212,255,0.18); }
+    100% { background: transparent; }
+  }
+  tbody tr.new-trade { animation: newTrade 3s ease forwards, rowIn 0.3s ease both; }
+  .watcher-dot-off { animation: none !important; opacity: 0.3; }
 </style>
 </head>
 <body>
@@ -477,8 +485,13 @@
     </div>
   </div>
   <div class="header-right">
-    <div class="last-updated"><span class="live-dot"></span><span id="lastUpdated">—</span></div>
-    <button class="refresh-btn" id="refreshBtn" onclick="triggerScrape()">⟳ REFRESH</button>
+    <div class="last-updated" id="watcherStatus" style="cursor:pointer" onclick="toggleWatcher()" title="Click to toggle watcher">
+      <span class="live-dot" id="watcherDot"></span><span id="watcherLabel">—</span>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      <button class="refresh-btn" id="refreshBtn" onclick="triggerScrape()" title="Re-scrape full history">⟳ FULL SCRAPE</button>
+    </div>
+    <div class="last-updated" style="margin-top:4px"><span id="lastUpdated" style="color:var(--text3)">—</span></div>
   </div>
 </div>
 
@@ -724,7 +737,7 @@ function renderTable() {
 
   const rows = trades.map((t, i) => {
     const isBuy = t.type === 'BUY';
-    const rowClass = isBuy ? 'buy-row' : 'sell-row';
+    const rowClass = (isBuy ? 'buy-row' : 'sell-row') + (t._new ? ' new-trade' : '');
     const tokenSym = (t.token || '').toUpperCase();
     const pnlVal = parseFloat(t.pnl);
     const hasPnl = !isNaN(pnlVal) && t.pnl != null;
@@ -775,21 +788,79 @@ function renderTable() {
 }
 
 
+// ── Watcher ────────────────────────────────────────────────────────────────
+let watcherActive = false;
+let pollHandle    = null;
+let lastTradeTime = null;
+
+async function checkWatcherStatus() {
+  try {
+    const res  = await fetch('/watcher/status');
+    const data = await res.json();
+    watcherActive = data.running;
+    updateWatcherUI();
+  } catch (_) {}
+}
+
+function updateWatcherUI() {
+  const dot   = document.getElementById('watcherDot');
+  const label = document.getElementById('watcherLabel');
+  if (watcherActive) {
+    dot.classList.remove('watcher-dot-off');
+    label.textContent = 'WATCHING';
+    label.style.color = 'var(--green)';
+    if (!pollHandle) pollHandle = setInterval(pollForNewTrades, 15000); // check UI every 15s
+  } else {
+    dot.classList.add('watcher-dot-off');
+    label.textContent = 'WATCHER OFF';
+    label.style.color = 'var(--text3)';
+    if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+  }
+}
+
+async function toggleWatcher() {
+  const endpoint = watcherActive ? '/watcher/stop' : '/watcher/start';
+  await fetch(endpoint, { method: 'POST' });
+  await checkWatcherStatus();
+}
+
+async function pollForNewTrades() {
+  // Silently reload trades.json and check if last_watch changed
+  try {
+    const res  = await fetch('/trades.json?t=' + Date.now());
+    const data = await res.json();
+    const watch = data.last_watch;
+    if (watch && watch !== lastTradeTime) {
+      lastTradeTime = watch;
+      const prev = allTrades.length;
+      // Reload full data
+      allTrades = data.trades || [];
+      document.getElementById('lastUpdated').textContent = new Date(watch).toLocaleTimeString();
+      const newCount = allTrades.filter(t => t._new).length;
+      if (newCount > 0) {
+        console.log(`[watcher] ${newCount} new trade(s)`);
+        // Flash stat bar
+        document.getElementById('statsBar').style.borderBottom = '1px solid var(--accent)';
+        setTimeout(() => document.getElementById('statsBar').style.borderBottom = '', 2000);
+      }
+      computeStats(allTrades);
+      renderTable();
+    }
+  } catch (_) {}
+}
+
 async function triggerScrape() {
   const btn = document.getElementById('refreshBtn');
   btn.textContent = '⟳ SCRAPING...';
   btn.disabled = true;
   document.getElementById('loadingOverlay').classList.add('show');
-
   try {
-    const res = await fetch('/scrape', { method: 'POST' });
+    const res  = await fetch('/scrape', { method: 'POST' });
     const data = await res.json();
     if (data.log) showScrapeLog(data.log);
     await loadData();
-  } catch(e) {
-    await loadData();
-  }
-  btn.textContent = '⟳ REFRESH';
+  } catch(e) { await loadData(); }
+  btn.textContent = '⟳ FULL SCRAPE';
   btn.disabled = false;
   document.getElementById('loadingOverlay').classList.remove('show');
 }
@@ -803,6 +874,7 @@ function showScrapeLog(log) {
 
 // Init
 loadData();
+checkWatcherStatus();
 </script>
 <div id="noDataPanel" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border2);padding:12px 36px;z-index:200">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
